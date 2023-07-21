@@ -2,52 +2,14 @@ const mongoose = require('mongoose')
 const supertest = require('supertest')
 const app = require('../app')
 const Blog = require('../models/blog')
+const helper = require('./test_helper')
 
 const api = supertest(app)
-
-const initialBlogs = [
-  {
-    title: "React patterns",
-    author: "Michael Chan",
-    url: "https://reactpatterns.com/",
-    likes: 7,
-  },
-  {
-    title: "Go To Statement Considered Harmful",
-    author: "Edsger W. Dijkstra",
-    url: "http://www.u.arizona.edu/~rubinson/copyright_violations/Go_To_Considered_Harmful.html",
-    likes: 5,
-  },
-  {
-    title: "Canonical string reduction",
-    author: "Edsger W. Dijkstra",
-    url: "http://www.cs.utexas.edu/~EWD/transcriptions/EWD08xx/EWD808.html",
-    likes: 12,
-  },
-  {
-    title: "First class tests",
-    author: "Robert C. Martin",
-    url: "http://blog.cleancoder.com/uncle-bob/2017/05/05/TestDefinitions.htmll",
-    likes: 10,
-  },
-  {
-    title: "TDD harms architecture",
-    author: "Robert C. Martin",
-    url: "http://blog.cleancoder.com/uncle-bob/2017/03/03/TDD-Harms-Architecture.html",
-    likes: 0,
-  },
-  {
-    title: "Type wars",
-    author: "Robert C. Martin",
-    url: "http://blog.cleancoder.com/uncle-bob/2016/05/01/TypeWars.html",
-    likes: 2,
-  }
-]
 
 beforeEach(async () => {
   await Blog.deleteMany({})
 
-  const blogObjects = initialBlogs.map(blog => new Blog(blog))
+  const blogObjects = helper.initialBlogs.map(blog => new Blog(blog))
   const promiseArray = blogObjects.map(blog => blog.save())
   await Promise.all(promiseArray)
 
@@ -63,7 +25,7 @@ describe('viewing all blog', () => {
 
   test('all blogs are returned', async () => {
     const response = await api.get('/api/blogs')
-    expect(response.body).toHaveLength(initialBlogs.length)
+    expect(response.body).toHaveLength(helper.initialBlogs.length)
   })
 
   test('a specific blog is within the returned blogs', async () => {
@@ -102,7 +64,7 @@ describe('adding a new blog', () => {
 
     const titles = response.body.map(blog => blog.title)
 
-    expect(response.body).toHaveLength(initialBlogs.length + 1)
+    expect(response.body).toHaveLength(helper.initialBlogs.length + 1)
     expect(titles).toContain('a blog')
 
   })
@@ -180,11 +142,49 @@ describe('deleting a single blog', () => {
     const newBlogs = await api.get('/api/blogs')
     const newBlogsArr = newBlogs.body
 
-    expect(newBlogsArr).toHaveLength(initialBlogs.length - 1)
+    expect(newBlogsArr).toHaveLength(helper.initialBlogs.length - 1)
 
     const titles = newBlogsArr.map(blog => blog.title)
 
     expect(titles).not.toContain(blogToDelete.title)
+  })
+})
+
+describe('updating a single blog', () => {
+  test('succeeds with a status code 200 if id is valid', async () => {
+    const allBlogs = await api.get('/api/blogs')
+    const blogsObjs = allBlogs.body
+    const blogToUpdate = blogsObjs[0]
+
+    const newBlog = {
+      title: 'a blog',
+      author: 'John Doe',
+      url: 'doe.com'
+    }
+
+    const response = await api
+      .put(`/api/blogs/${blogToUpdate.id}`)
+      .send(newBlog)
+      .expect(200)
+      .expect('Content-Type', /application\/json/)
+
+    expect(response.body.title).toBe('a blog')
+  })
+
+  test('fails with a status code 400 if id is invalid', async () => {
+    const invalidId = 'random'
+
+    const newBlog = {
+      title: 'a blog',
+      author: 'John Doe',
+      url: 'doe.com'
+    }
+
+    await api
+      .put(`/api/blogs/${invalidId}`)
+      .send(newBlog)
+      .expect(400)
+
   })
 })
 
