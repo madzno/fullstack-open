@@ -3,6 +3,8 @@ const supertest = require('supertest')
 const app = require('../app')
 const Blog = require('../models/blog')
 const helper = require('./test_helper')
+const bcrypt = require('bcrypt')
+const User = require('../models/user')
 
 const api = supertest(app)
 
@@ -185,6 +187,122 @@ describe('updating a single blog', () => {
       .send(newBlog)
       .expect(400)
 
+  })
+})
+
+describe('when there is initially one user in db', () => {
+  beforeEach(async () => {
+    await User.deleteMany({})
+
+    const passwordHash = await bcrypt.hash('test', 10)
+    const user = new User({ name: 'test', username: 'testUser', passwordHash })
+
+    await user.save();
+  })
+
+  test('we can view all users as json', async () => {
+    const response = await api
+      .get('/api/users')
+      .expect(200)
+      .expect('Content-Type', /application\/json/)
+
+    const usernames = response.body.map(u => u.username)
+    expect(usernames).toContain('testUser')
+  })
+
+  test('creation succeeds with a fresh username', async () => {
+    const usersAtStart = await helper.usersInDb()
+
+    const newUser = {
+      username: 'hello',
+      name: 'world',
+      password: 'helloworld'
+    }
+
+    await api
+      .post('/api/users')
+      .send(newUser)
+      .expect(201)
+      .expect('Content-Type', /application\/json/)
+
+    const usersAtEnd = await helper.usersInDb()
+    expect(usersAtEnd).toHaveLength(usersAtStart.length + 1)
+
+    const usernames = usersAtEnd.map(u => u.username)
+    expect(usernames).toContain(newUser.username)
+  })
+
+  test('we cannot create a user with no username', async () => {
+    const newUser = {
+      name: 'world',
+      password: 'helloworld'
+    }
+
+    const response = await api
+      .post('/api/users')
+      .send(newUser)
+      .expect(400)
+
+    expect(response.body.error).toContain('username missing')
+  })
+
+  test('we cannot create a user with no password', async () => {
+    const newUser = {
+      username: 'hello',
+      name: 'world'
+    }
+
+    const response = await api
+      .post('/api/users')
+      .send(newUser)
+      .expect(400)
+
+    expect(response.body.error).toContain('password missing')
+  })
+
+  test('username must be at least 3 characters long', async () => {
+    const newUser = {
+      username: 'mm',
+      name: 'world',
+      password: 'test'
+    }
+
+    const response = await api
+      .post('/api/users')
+      .send(newUser)
+      .expect(400)
+
+    expect(response.body.error).toContain('username must be at least 3 characters')
+  })
+
+  test('password must be at least 3 characters long', async () => {
+    const newUser = {
+      username: 'hello',
+      name: 'world',
+      password: 'mm'
+    }
+
+    const response = await api
+      .post('/api/users')
+      .send(newUser)
+      .expect(400)
+
+    expect(response.body.error).toContain('password must be at least 3 characters')
+  })
+
+  test('username must be unique', async () => {
+    const newUser = {
+      username: 'testUser',
+      name: 'world',
+      password: 'helloworld'
+    }
+
+    const response = await api
+      .post('/api/users')
+      .send(newUser)
+      .expect(400)
+
+    expect(response.body.error).toContain('expected `username` to be unique')
   })
 })
 
